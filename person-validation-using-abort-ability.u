@@ -1,0 +1,138 @@
+
+  use .base
+  use Optional Some None
+  use Abort.toOptional
+  use io.printLine
+  use Text.size
+
+  ability Abort where
+    abort : {Abort} a
+
+  Abort.toOptional : '{g, Abort} a -> {g} Optional a
+  Abort.toOptional c =
+    handler : Request {Abort} a -> Optional a
+    handler = cases
+      { a }         -> Some a
+      { abort -> _ } -> None
+    handle !c with handler
+
+  type Person = { name: Text, surname: Text, age: Nat }
+
+  Person.toText : Person -> {} Text
+  Person.toText person =
+    match person with
+      Person.Person name surname age
+        -> "Person(" ++ name ++ "," ++ surname ++ "," ++ Text.toText(age) ++ ")"
+
+  toText : Optional Person -> {} Text
+  toText = cases
+    Some person -> Person.toText person
+    None        -> "None"
+
+  validateName : Text -> { Abort } Text
+  validateName name =
+    if (size name > 1) && (size name < 15)
+    then name
+    else abort
+
+  validateSurname : Text -> { Abort }  Text
+  validateSurname surname =
+    if (size surname > 1) && (size surname < 20)
+    then surname
+    else abort
+
+  validateAge : Nat -> { Abort } Nat
+  validateAge age =
+    if (age > 0) && (age < 112)
+    then age
+    else abort
+
+  createPerson : Text -> Text -> Nat -> { Abort } Person
+  createPerson name surname age =
+    Person.Person
+      (validateName name)
+      (validateSurname surname)
+      (validateAge age)
+
+  potentialPeople : ['{Abort} Person]
+  potentialPeople =
+    ['(createPerson "Fred" "Smith" 35),
+     '(createPerson    "x" "Smith" 35),
+     '(createPerson "Fred"      "" 35),
+     '(createPerson "Fred" "Smith"  0)]
+
+  -- base.List.foldl : (b ->{e} a ->{e} b) -> b -> [a] ->{e} b
+  -- base.List.foldl : (b -> a -> b) -> b -> [a] -> b
+
+  people : Text
+  people =
+    foldl
+      (text person -> text ++ "\n" ++ toText (toOptional person))
+      ""
+      potentialPeople
+
+  main : '{IO} ()
+  main = '(io.printLine <| people)
+
+--  main : '{base.io.IO} ()
+--  main = '(io.printLine <| (Person.toText(Person.Person "abc" "def" 45)))
+
+  test> peopleTest =
+    check (people == "\nPerson(Fred,Smith,35)\nNone\nNone\nNone")
+
+  test> validPersonAsText =
+    check (Person.toText (Person.Person "Fred" "Smith" 35) == "Person(Fred,Smith,35)")
+
+  test> createValidPerson =
+    check ((toOptional '(createPerson "Fred" "Smith" 35)) == Some((Person.Person "Fred" "Smith" 35)))
+
+
+  test> abortAsOptionIsNone =
+    check (toOptional 'abort == None)
+
+  test> abortExpressionAsOptionIsNone =
+    check (toOptional '(if false then "abc" else abort) == None)
+
+  test> nonAbortExpressionAsOptionIsSome =
+    check (toOptional '(if true then "abc" else abort) == Some "abc")
+
+
+  test> notCreatePersonWithInvalidName =
+    check (toOptional('(createPerson "F" "Smith" 35)) == toOptional('abort))
+
+  test> notCreatePersonWithInvalidSurname =
+    check (toOptional('(createPerson "Fred" "" 35)) == toOptional('abort))
+
+  test> notCreatePersonWithInvalidAge =
+    check (toOptional('(createPerson "Fred" "Smith" 200)) == toOptional('abort))
+
+
+  test> personWithInvalidNameAsOptionIsNone =
+    check (toOptional '(createPerson "F" "Smith" 35) == None)
+
+  test> personWithInvalidSurnameAsOptionIsNone =
+    check (toOptional '(createPerson "Fred" "" 35) == None)
+
+  test> personWithInvalidAgeAsOptionIsNone =
+    check (toOptional '(createPerson "Fred" "Smith" 200) == None)
+
+  test> personWithAllInvalidFieldsAsOptionIsNone =
+    check (toOptional '(createPerson "" "S" 200) == None)
+
+  test> invalidNameAsOptionIsNone =
+    check (toOptional '(validateName "") == None)
+
+  test> invalidSurnameAsOptionIsNone =
+    check (toOptional '(validateSurname "X") == None)
+
+  test> invalidAgeAsOptionIsNone =
+    check (toOptional '(validateAge 200) == None)
+
+  test> validNameAsOptionIsSome =
+    check (toOptional '(validateName "Fred") == Some "Fred")
+
+  test> validSurnameAsOptionIsSome =
+    check (toOptional '(validateSurname "Smith") == Some "Smith")
+
+  test> validAgeAsOptionIsSome =
+    check (toOptional '(validateAge 35) == Some 35)

@@ -1,0 +1,117 @@
+
+  use .base
+  use Optional Some None
+
+  type Person = { name: Text, surname: Text, age: Nat }
+
+  Person.toText : Person -> {} Text
+  Person.toText person =
+    match person with
+      Person.Person name surname age
+        -> "Person(" ++ name ++ "," ++ surname ++ "," ++ Text.toText(age) ++ ")"
+
+  toText : Optional Person -> {} Text
+  toText = cases
+    Some person -> Person.toText person
+    None        -> "None"
+
+  validateName : Text -> Optional Text
+  validateName name =
+    if (size name > 1) && (size name < 15)
+    then Some name
+    else None
+
+  validateSurname : Text -> Optional  Text
+  validateSurname surname =
+    if (size surname > 1) && (size surname < 20)
+    then Some surname
+    else None
+
+  validateAge : Nat -> Optional Nat
+  validateAge age =
+    if (age > 0) && (age < 112)
+    then Some age
+    else None
+
+  type base.Optional a = None | Some a
+
+  base.Optional.flatMap : (a -> Optional b) -> Optional a -> Optional b
+  base.Optional.flatMap f = cases
+    None   -> None
+    Some a -> f a
+
+  base.Optional.map : (a -> b) -> Optional a -> Optional b
+  base.Optional.map f = cases
+    None   -> None
+    Some a -> Some (f a)
+
+  use .base.Optional map flatMap
+
+  createPerson : Text -> Text -> Nat -> Optional Person
+  createPerson name surname age =
+    flatMap (aName ->
+      flatMap (aSurname ->
+        map (anAge ->
+          Person.Person aName aSurname anAge
+        )(validateAge age)
+      )(validateSurname surname)
+    )(validateName name)
+
+  potentialPeople : [Optional Person]
+  potentialPeople =
+    [(createPerson "Fred" "Smith" 35),
+     (createPerson    "x" "Smith" 35),
+     (createPerson "Fred"      "" 35),
+     (createPerson "Fred" "Smith"  0)]
+
+  -- base.List.foldl : (b ->{e} a ->{e} b) -> b -> [a] ->{e} b
+  -- base.List.foldl : (b -> a -> b) -> b -> [a] -> b
+
+  people : Text
+  people =
+    foldl
+      (text person -> text ++ "\n" ++ (toText person))
+      ""
+      potentialPeople
+
+  main : '{IO} ()
+  main = '(io.printLine <| people)
+
+  test> peopleTest =
+    check (people == "\nPerson(Fred,Smith,35)\nNone\nNone\nNone")
+
+  test> validPersonAsText =
+    check (Person.toText (Person.Person "Fred" "Smith" 35) == "Person(Fred,Smith,35)")
+
+  test> validPerson =
+    check (createPerson "Fred" "Smith" 35 == Some (Person.Person "Fred" "Smith" 35))
+
+  test> noValidPersonWithInvalidName =
+    check (createPerson "F" "Smith" 35 == None)
+
+  test> noValidPersonWithInvalidSurname =
+    check (createPerson "Fred" "" 35 == None)
+
+  test> noValidPersonWithInvalidAge =
+    check (createPerson "Fred" "Smith" 200 == None)
+
+  test> noValidPersonInvalidNameSurnameAndAge =
+    check (createPerson "" "S" 200 == None)
+
+  test> validName =
+    check (validateName "Fred" == Some "Fred")
+
+  test> validSurname =
+    check (validateSurname "Smith" == Some "Smith")
+
+  test> validAge =
+    check (validateAge 35 == Some 35)
+
+  test> noInvalidName =
+    check (validateName "" == None)
+
+  test> noInvalidSurname =
+    check (validateSurname "X" == None)
+
+  test> noInvalidAge =
+    check (validateAge 200 == None)

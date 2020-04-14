@@ -1,0 +1,66 @@
+--  use .base
+--  use List Optional Some None drop map
+
+  List.head : [a] -> Optional a
+  List.head a = List.at 0 a
+  use List head
+
+  ability State s where
+    put : s -> {State s} ()
+    get : {State s} s
+
+  pop : '{State [a]} (Optional a)
+  pop = 'let
+    stack = State.get
+    State.put (drop 1 stack)
+    head stack
+  push : a -> {State [a]} ()
+  push a = put (cons a State.get)
+
+  state : s -> '({State s} a) -> a
+  state s c =
+    h : s -> Request {State s} a -> a
+    h s = cases
+      { State.get -> k } ->
+        handle k s
+          with h s
+      { State.put s -> k } ->
+        handle k ()
+          with h s
+      { a } -> a
+    handle !c
+      with h s
+
+  stackProgram : '{State [Nat]} [Nat]
+  stackProgram =
+    'let top = !pop
+         match top with
+           None ->
+             push 0
+             push 1
+             push 2
+           Some 5 ->
+             !pop
+             push 5
+           Some n ->
+             !pop
+             !pop
+             push n
+             push (n + n)
+         State.get
+
+  runStack : [Nat]
+  runStack = state [5,4,3,2,1] stackProgram
+
+  > runStack
+
+  test> topIsFive =  check( state [5,4,3,2,1] stackProgram == [5,3,2,1] )
+
+  test> topIsNotFive =  check( state [6,5,4,3,2,1] stackProgram == [12,6,3,2,1] )
+
+  test> topIsMissing =  check( state [] stackProgram == [2,1,0] )
+
+
+
+
+
